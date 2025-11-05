@@ -1,0 +1,137 @@
+require("dotenv").config();
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// MongoDB Connection
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch((err) => {
+    console.error("❌ MongoDB Connection Error:", err.message);
+    console.log("⚠️  Running without database. Deploy to use MongoDB Atlas.");
+  });
+
+// Models
+const TestSetSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    description: { type: String, required: true },
+    duration: { type: Number, required: true },
+    questions: [
+      {
+        question: String,
+        options: [String],
+        answer: Number,
+      },
+    ],
+  },
+  { timestamps: true }
+);
+
+const TestSet = mongoose.model("TestSet", TestSetSchema);
+
+// Routes
+
+// GET /api/tests - Get all test sets
+app.get("/api/tests", async (req, res) => {
+  try {
+    const tests = await TestSet.find().sort({ createdAt: -1 });
+    res.json({ testSets: tests });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch tests" });
+  }
+});
+
+// GET /api/tests/:id - Get single test set
+app.get("/api/tests/:id", async (req, res) => {
+  try {
+    const test = await TestSet.findOne({ id: req.params.id });
+    if (!test) {
+      return res.status(404).json({ error: "Test not found" });
+    }
+    res.json(test);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch test" });
+  }
+});
+
+// POST /api/tests - Create new test set
+app.post("/api/tests", async (req, res) => {
+  try {
+    const { id, name, description, duration, questions } = req.body;
+    const newTest = new TestSet({
+      id: id || `test-${Date.now()}`,
+      name,
+      description,
+      duration,
+      questions: questions || [],
+    });
+    await newTest.save();
+    res.status(201).json(newTest);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create test" });
+  }
+});
+
+// PUT /api/tests/:id - Update test set
+app.put("/api/tests/:id", async (req, res) => {
+  try {
+    const { name, description, duration, questions } = req.body;
+
+    console.log("Update request for test:", req.params.id);
+    console.log("Update data:", {
+      name,
+      description,
+      duration,
+      questionsCount: questions?.length,
+    });
+
+    const test = await TestSet.findOneAndUpdate(
+      { id: req.params.id },
+      { name, description, duration, questions },
+      { new: true }
+    );
+    if (!test) {
+      console.error("Test not found:", req.params.id);
+      return res.status(404).json({ error: "Test not found" });
+    }
+    console.log("Test updated successfully:", test.id);
+    res.json(test);
+  } catch (error) {
+    console.error("Update error:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to update test", details: error.message });
+  }
+});
+
+// DELETE /api/tests/:id - Delete test set
+app.delete("/api/tests/:id", async (req, res) => {
+  try {
+    const test = await TestSet.findOneAndDelete({ id: req.params.id });
+    if (!test) {
+      return res.status(404).json({ error: "Test not found" });
+    }
+    res.json({ message: "Test deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delete test" });
+  }
+});
+
+// Health check
+app.get("/", (req, res) => {
+  res.json({ message: "English Test API - Running ✅", version: "1.0.0" });
+});
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});

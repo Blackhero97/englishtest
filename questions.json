@@ -1,0 +1,20 @@
+[
+  {
+    "id": 1,
+    "question": "What is the capital of England?",
+    "options": ["London", "Paris", "Berlin", "Madrid"],
+    "answer": 0
+  },
+  {
+    "id": 2,
+    "question": "Choose the correct form: 'She ___ to school every day.'",
+    "options": ["go", "goes", "going", "gone"],
+    "answer": 1
+  },
+  {
+    "id": 3,
+    "question": "What is the opposite of 'hot'?",
+    "options": ["cold", "warm", "cool", "heat"],
+    "answer": 0
+  }
+]

@@ -268,6 +268,13 @@ app.post("/api/ai/generate-test", async (req, res) => {
       });
     }
 
+    if (!model) {
+      return res.status(503).json({
+        error:
+          "AI service is currently unavailable. The Gemini API model could not be initialized. This might be due to an API version mismatch. Please contact support.",
+      });
+    }
+
     const prompt = `Generate ${
       questionCount || 5
     } English proficiency test questions about "${topic || "General English"}".

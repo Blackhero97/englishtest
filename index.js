@@ -11,15 +11,11 @@ const PORT = process.env.PORT || 5000;
 let model;
 try {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-  // Use gemini-1.5-pro for stable API v1 support
+  // Use original gemini-pro model (most stable, works on all API versions)
   model = genAI.getGenerativeModel({
-    model: "gemini-1.5-pro",
-    generationConfig: {
-      temperature: 0.7,
-      maxOutputTokens: 2048,
-    },
+    model: "gemini-pro",
   });
-  console.log("✅ Gemini AI initialized successfully");
+  console.log("✅ Gemini AI initialized successfully with gemini-pro");
 } catch (error) {
   console.warn("⚠️  Gemini AI initialization failed:", error.message);
 }

@@ -2,23 +2,16 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Initialize Gemini AI
-let model;
-try {
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-  // Use original gemini-pro model (most stable, works on all API versions)
-  model = genAI.getGenerativeModel({
-    model: "gemini-pro",
-  });
-  console.log("✅ Gemini AI initialized successfully with gemini-pro");
-} catch (error) {
-  console.warn("⚠️  Gemini AI initialization failed:", error.message);
-}
+// Gemini AI v1 API Configuration
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
+const GEMINI_API_URL =
+  "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent";
+
+console.log("✅ Gemini AI configured with v1 API (gemini-1.5-pro)");
 
 // Middleware - CORS Configuration
 const allowedOrigins = [
@@ -268,13 +261,6 @@ app.post("/api/ai/generate-test", async (req, res) => {
       });
     }
 
-    if (!model) {
-      return res.status(503).json({
-        error:
-          "AI service is currently unavailable. The Gemini API model could not be initialized. This might be due to an API version mismatch. Please contact support.",
-      });
-    }
-
     const prompt = `Generate ${
       questionCount || 5
     } English proficiency test questions about "${topic || "General English"}".
@@ -300,9 +286,30 @@ Rules:
 - Return ONLY valid JSON, no additional text`;
 
     console.log("🤖 Generating AI questions for:", topic);
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+
+    // Use v1 API with direct fetch
+    const apiResponse = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+      }),
+    });
+
+    if (!apiResponse.ok) {
+      const errorData = await apiResponse.json();
+      throw new Error(
+        `Gemini API Error: ${errorData.error?.message || "Unknown error"}`
+      );
+    }
+
+    const apiData = await apiResponse.json();
+    const text = apiData.candidates[0].content.parts[0].text;
 
     console.log("AI Response:", text);
 
@@ -363,9 +370,30 @@ Student Question: ${message}
 Please provide a helpful, encouraging response focused on English learning.`;
 
     console.log("💬 AI Chat request:", message);
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+
+    // Use v1 API with direct fetch
+    const apiResponse = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+      }),
+    });
+
+    if (!apiResponse.ok) {
+      const errorData = await apiResponse.json();
+      throw new Error(
+        `Gemini API Error: ${errorData.error?.message || "Unknown error"}`
+      );
+    }
+
+    const apiData = await apiResponse.json();
+    const text = apiData.candidates[0].content.parts[0].text;
 
     res.json({
       success: true,

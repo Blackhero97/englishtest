@@ -12,12 +12,12 @@ let model;
 try {
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
   // Use gemini-1.5-pro for stable API v1 support
-  model = genAI.getGenerativeModel({ 
+  model = genAI.getGenerativeModel({
     model: "gemini-1.5-pro",
     generationConfig: {
       temperature: 0.7,
       maxOutputTokens: 2048,
-    }
+    },
   });
   console.log("✅ Gemini AI initialized successfully");
 } catch (error) {

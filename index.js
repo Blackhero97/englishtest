@@ -368,30 +368,105 @@ app.post("/api/ai/chat", async (req, res) => {
     const { message, context } = req.body;
 
     const systemContext = context
-      ? `
-Student Context:
+      ? `You are an experienced English teacher helping a student who just completed a test.
+
+Test Results:
 - Test Name: ${context.testName}
-- Score: ${context.score}/${context.totalQuestions}
-- Percentage: ${context.percentage}%
-- Weak Areas: ${context.weakAreas || "Not specified"}
+- Score: ${context.correctAnswers}/${context.totalQuestions} (${context.percentage}%)
+- Wrong Answers: ${context.wrongAnswers}
 
-You are an English teacher helping this student improve their skills.
-Be encouraging, concise, and clear.`
-      : "You are a helpful English learning assistant.";
+CRITICAL RULES:
+1. ONLY discuss topics related to ENGLISH LANGUAGE (grammar, vocabulary, tenses, etc.)
+2. Students may ask in English, Russian, or Uzbek (Latin/Cyrillic)
+3. If they ask "o'zbekchada tushuntir" or "на русском объясни" - respond in that language BUT ONLY about English topics
+4. If they ask about non-English topics (math, history, etc.) - politely redirect to English learning
+5. Provide test feedback and help improve English skills
+6. Use clear examples and explanations
 
-    const prompt = `${systemContext}\n\nStudent Message: ${message}`;
+Language Response Rules:
+- If student asks in English → respond in English
+- If student asks "o'zbekchada tushuntir" → explain English grammar/vocabulary in Uzbek
+- If student asks "на русском" → explain English grammar/vocabulary in Russian
+- BUT always keep the topic focused on ENGLISH LANGUAGE LEARNING
+
+Examples:
+Student: "Present Perfect ni o'zbekchada tushuntir"
+You: "Present Perfect - bu hozirgi vaqtga bog'liq bo'lgan o'tmishdagi harakatlar uchun ishlatiladi. Masalan: I have finished my homework (Men uyga vazifani tugalladim - natija hozir muhim)..."
+
+Student: "What is Present Perfect?"
+You: "Present Perfect is a tense used for actions that happened at an unspecified time..."
+
+Student: "Matematikani tushuntir"
+You: "I'm an English teacher, so I can only help with English language topics like grammar, vocabulary, tenses, etc. Do you have any questions about English?"
+
+Be friendly and supportive. Keep responses 2-4 paragraphs.`
+      : `You are an expert English language teacher and tutor for international students.
+
+CRITICAL RULES:
+1. ONLY discuss topics related to ENGLISH LANGUAGE (grammar, vocabulary, pronunciation, writing, reading, etc.)
+2. Students may ask in English, Russian, or Uzbek (Latin/Cyrillic)
+3. If they ask "o'zbekchada tushuntir" or "на русском объясни" - respond in that language BUT ONLY about English topics
+4. If they ask about non-English topics (math, science, history, etc.) - politely decline and redirect to English
+5. Help with IELTS, TOEFL, Cambridge exams (only English-related content)
+6. Provide tips for improving English skills
+
+Language Response Rules:
+- If student asks in English → respond in English
+- If student asks "o'zbekchada tushuntir" or "uzbekchada" → explain English grammar/vocabulary in Uzbek
+- If student asks "на русском" or "po russki" → explain English grammar/vocabulary in Russian  
+- If student asks "inglizchada" → respond in English
+- BUT always keep the topic strictly about ENGLISH LANGUAGE LEARNING
+
+Examples:
+Student: "Present Perfect ni o'zbekchada tushuntir"
+You: "Present Perfect - bu ingliz tilida hozirgi vaqtga aloqador bo'lgan o'tmishdagi harakatlar uchun ishlatiladigan zamon. Formulasi: have/has + past participle (V3). Masalan: I have studied English for 5 years (Men 5 yil ingliz tilini o'rganyapman - hali davom etmoqda)..."
+
+Student: "Explain conditionals in Russian"
+You: "Условные предложения (conditionals) в английском языке бывают четырех типов. Zero conditional используется для общих истин: If you heat water, it boils..."
+
+Student: "How do I use Past Simple?"
+You: "Past Simple is used for completed actions in the past. Form: verb + ed (regular verbs) or irregular past form. Example: I studied yesterday, She went to school..."
+
+Student: "Fizikani tushuntir"
+You: "I'm an English language teacher. I can only help you with English grammar, vocabulary, pronunciation, writing, reading, and exam preparation (IELTS, TOEFL). Do you have any questions about learning English?"
+
+Be friendly, patient, and encouraging. Keep responses focused on English learning, 2-4 paragraphs.`;
+
+    const prompt = `${systemContext}\n\nStudent Question: ${message}\n\nYour Response:`;
+
+    console.log("💬 AI Chat request:", {
+      hasContext: !!context,
+      message: message.substring(0, 50),
+    });
 
     const response = await fetch(`${GEMINI_URL_CHAT}?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.8,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 1024,
+        },
       }),
     });
 
     const data = await response.json();
+
+    if (!response.ok) {
+      console.error("❌ Gemini Chat API Error:", data);
+      throw new Error(data.error?.message || "Gemini API request failed");
+    }
+
     const text =
       data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response from AI";
+
+    console.log(
+      "✅ AI Chat response received:",
+      text.substring(0, 100) + "..."
+    );
 
     res.json({ success: true, reply: text });
   } catch (error) {

@@ -9,9 +9,9 @@ const PORT = process.env.PORT || 5000;
 // Gemini AI v1 API Configuration
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent";
+  "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent";
 
-console.log("✅ Gemini AI configured with v1 API (gemini-1.5-pro)");
+console.log("✅ Gemini AI configured with v1 API (gemini-pro - stable)");
 
 // Middleware - CORS Configuration
 const allowedOrigins = [

@@ -8,8 +8,21 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+let model;
+try {
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+  // Use gemini-1.5-pro for stable API v1 support
+  model = genAI.getGenerativeModel({ 
+    model: "gemini-1.5-pro",
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 2048,
+    }
+  });
+  console.log("✅ Gemini AI initialized successfully");
+} catch (error) {
+  console.warn("⚠️  Gemini AI initialization failed:", error.message);
+}
 
 // Middleware - CORS Configuration
 const allowedOrigins = [

@@ -194,21 +194,27 @@ app.post("/api/ai/generate-test", async (req, res) => {
   try {
     const { topic, difficulty, questionCount } = req.body;
 
-    const prompt = `
-Generate ${questionCount || 5} multiple-choice English test questions about "${
-      topic || "General English"
-    }".
-Difficulty: ${difficulty || "intermediate"}.
-Return valid JSON like:
+    const prompt = `You are an English test generator. Create ${
+      questionCount || 5
+    } multiple-choice questions about "${topic || "General English"}".
+Difficulty level: ${difficulty || "intermediate"}
+
+IMPORTANT: Return ONLY valid JSON in this EXACT format (no markdown, no explanation):
 {
   "questions": [
     {
-      "question": "Question?",
-      "options": ["A","B","C","D"],
-      "answer": 1
+      "question": "Your question text here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "answer": 0
     }
   ]
-}`;
+}
+
+Rules:
+- "answer" is the index (0-3) of the correct option
+- Each question must have exactly 4 options
+- Questions must test English grammar, vocabulary, or comprehension
+- Return ONLY the JSON object, nothing else`;
 
     console.log("🤖 Generating AI questions for:", topic);
 
@@ -217,27 +223,55 @@ Return valid JSON like:
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 2048,
+        },
       }),
     });
 
     const data = await response.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
 
-    if (!jsonMatch) throw new Error("AI did not return valid JSON");
+    if (!response.ok) {
+      console.error("❌ Gemini API Error:", data);
+      throw new Error(data.error?.message || "Gemini API request failed");
+    }
+
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    console.log("📥 AI Response:", text.substring(0, 200) + "...");
+
+    // Remove markdown code blocks if present
+    let cleanText = text
+      .replace(/```json\n?/g, "")
+      .replace(/```\n?/g, "")
+      .trim();
+
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error("❌ No JSON found in response:", text);
+      throw new Error("AI did not return valid JSON format");
+    }
+
     const aiData = JSON.parse(jsonMatch[0]);
+
+    if (!aiData.questions || !Array.isArray(aiData.questions)) {
+      throw new Error("Invalid questions format");
+    }
 
     res.json({
       success: true,
       topic: topic || "General English",
       difficulty: difficulty || "intermediate",
-      questions: aiData.questions || [],
+      questions: aiData.questions,
     });
   } catch (error) {
     console.error("AI Generate Error:", error.message);
-    res
-      .status(500)
-      .json({ error: "Failed to generate questions", details: error.message });
+    res.status(500).json({
+      error: "Failed to generate questions",
+      details: error.message,
+    });
   }
 });
 

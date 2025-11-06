@@ -7,17 +7,104 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // =========================
-// 🔹 Gemini AI Config
+// 🔹 Gemini AI Config (dynamic)
 // =========================
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 
-// Model URLs
-const GEMINI_URL_TEST =
-  "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent";
-const GEMINI_URL_CHAT =
-  "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent";
+// We'll detect available models at startup for this API key and pick
+// the best-supported models for generateContent (test) and chat.
+let GEMINI_URL_TEST = null;
+let GEMINI_URL_CHAT = null;
 
-console.log("✅ Gemini AI configured with v1 API (flash + pro models enabled)");
+const MODEL_PREFERENCES = {
+  // prefer the most recent 2.x family, then 1.5, then gemini-pro
+  test: [
+    "models/gemini-2.5-flash",
+    "models/gemini-2.0-flash",
+    "models/gemini-1.5-flash",
+    "models/gemini-1.5-flash-latest",
+    "models/gemini-pro",
+    "models/gemini-1.5-pro",
+  ],
+  chat: [
+    "models/gemini-2.5-pro",
+    "models/gemini-2.0-pro",
+    "models/gemini-pro",
+    "models/gemini-1.5-pro",
+  ],
+};
+
+async function detectAndConfigureModels() {
+  if (!GEMINI_API_KEY) {
+    console.warn(
+      "⚠️ GEMINI_API_KEY is not set. AI routes will fail until you set the key."
+    );
+    return;
+  }
+
+  // Try listing models with retries (handles transient network blips)
+  const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${GEMINI_API_KEY}`;
+  let attempt = 0;
+  let body = null;
+  while (attempt < 3) {
+    attempt += 1;
+    try {
+      const resp = await fetch(listUrl);
+      body = await resp.json();
+      break;
+    } catch (err) {
+      console.warn(
+        `Attempt ${attempt} to list models failed:`,
+        err?.message || err
+      );
+      await new Promise((r) => setTimeout(r, 500 * attempt));
+    }
+  }
+
+  if (body && body.models) {
+    const available = (body.models || []).map((m) => m.name);
+    console.log("ℹ️ Available Gemini models:", available);
+
+    function findSupported(prefList) {
+      for (const pref of prefList) {
+        if (available.includes(pref)) return pref;
+      }
+      return null;
+    }
+
+    const testModel = findSupported(MODEL_PREFERENCES.test);
+    const chatModel = findSupported(MODEL_PREFERENCES.chat);
+
+    if (testModel) {
+      GEMINI_URL_TEST = `https://generativelanguage.googleapis.com/v1/${testModel}:generateContent`;
+    }
+    if (chatModel) {
+      GEMINI_URL_CHAT = `https://generativelanguage.googleapis.com/v1/${chatModel}:generateContent`;
+    }
+
+    if (!GEMINI_URL_TEST && !GEMINI_URL_CHAT) {
+      console.warn(
+        "⚠️ No supported Gemini models were found for this API key. Check model access in Google Cloud Console."
+      );
+    } else {
+      console.log(
+        `✅ Gemini AI configured. test=${GEMINI_URL_TEST || "(none)"}, chat=${
+          GEMINI_URL_CHAT || "(none)"
+        }`
+      );
+    }
+  } else {
+    // Listing failed after retries — set reasonable fallbacks (2.5 models are common)
+    console.warn(
+      "⚠️ Could not list models — applying fallback model choices (may still 404 if key lacks access)"
+    );
+    GEMINI_URL_TEST = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent`;
+    GEMINI_URL_CHAT = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-pro:generateContent`;
+    console.log(
+      `ℹ️ Fallback Gemini URLs set. test=${GEMINI_URL_TEST}, chat=${GEMINI_URL_CHAT}`
+    );
+  }
+}
 
 // =========================
 // 🔹 Middleware
@@ -322,4 +409,9 @@ app.get("/", (req, res) => {
   res.json({ message: "English Test API running ✅", version: "1.1.0" });
 });
 
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// Start server after attempting to detect available Gemini models.
+(async () => {
+  await detectAndConfigureModels();
+
+  app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+})();

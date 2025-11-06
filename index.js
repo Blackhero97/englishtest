@@ -64,6 +64,25 @@ const TestSetSchema = new mongoose.Schema(
 
 const TestSet = mongoose.model("TestSet", TestSetSchema);
 
+// Result Schema - O'quvchi natijalari
+const ResultSchema = new mongoose.Schema(
+  {
+    firstName: { type: String, required: true },
+    lastName: { type: String, required: true },
+    testId: { type: String, required: true },
+    testName: { type: String, required: true },
+    score: { type: Number, required: true },
+    percentage: { type: Number, required: true },
+    totalQuestions: { type: Number, required: true },
+    correctAnswers: { type: Number, required: true },
+    wrongAnswers: { type: Number, required: true },
+    answers: [Number], // O'quvchining javoblari
+  },
+  { timestamps: true }
+);
+
+const Result = mongoose.model("Result", ResultSchema);
+
 // Routes
 
 // GET /api/tests - Get all test sets
@@ -149,6 +168,72 @@ app.delete("/api/tests/:id", async (req, res) => {
     res.json({ message: "Test deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete test" });
+  }
+});
+
+// ===== RESULT ROUTES =====
+
+// GET /api/results - Get all results
+app.get("/api/results", async (req, res) => {
+  try {
+    const results = await Result.find().sort({ createdAt: -1 });
+    res.json({ results });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch results" });
+  }
+});
+
+// POST /api/results - Save test result
+app.post("/api/results", async (req, res) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      testId,
+      testName,
+      score,
+      percentage,
+      totalQuestions,
+      correctAnswers,
+      wrongAnswers,
+      answers,
+    } = req.body;
+
+    const newResult = new Result({
+      firstName,
+      lastName,
+      testId,
+      testName,
+      score,
+      percentage,
+      totalQuestions,
+      correctAnswers,
+      wrongAnswers,
+      answers,
+    });
+
+    await newResult.save();
+    res
+      .status(201)
+      .json({ message: "Result saved successfully", result: newResult });
+  } catch (error) {
+    console.error("Save result error:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to save result", details: error.message });
+  }
+});
+
+// DELETE /api/results/:id - Delete result
+app.delete("/api/results/:id", async (req, res) => {
+  try {
+    const result = await Result.findByIdAndDelete(req.params.id);
+    if (!result) {
+      return res.status(404).json({ error: "Result not found" });
+    }
+    res.json({ message: "Result deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delete result" });
   }
 });
 

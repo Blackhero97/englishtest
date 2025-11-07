@@ -365,7 +365,32 @@ Rules:
 // 🔸 Chat & Feedback (pro model)
 app.post("/api/ai/chat", async (req, res) => {
   try {
+    // Input validation
     const { message, context } = req.body;
+
+    if (!message || typeof message !== "string" || message.trim().length === 0) {
+      return res.status(400).json({ 
+        error: "Message is required and cannot be empty",
+        details: "Please provide a valid message"
+      });
+    }
+
+    // Check if Gemini is properly configured
+    if (!GEMINI_API_KEY) {
+      console.error("❌ GEMINI_API_KEY is not configured");
+      return res.status(500).json({
+        error: "AI service is not available",
+        details: "Chat service is currently unavailable. Please try again later."
+      });
+    }
+
+    if (!GEMINI_URL_CHAT) {
+      console.error("❌ GEMINI_URL_CHAT is not configured");
+      return res.status(500).json({
+        error: "AI service is not available", 
+        details: "Chat service is currently unavailable. Please try again later."
+      });
+    }
 
     const systemContext = context
       ? `You are a friendly and helpful English teacher assisting a student who completed a test.
@@ -400,6 +425,8 @@ Instructions:
     console.log("💬 AI Chat request:", {
       hasContext: !!context,
       message: message.substring(0, 50),
+      apiKeyConfigured: !!GEMINI_API_KEY,
+      chatUrlConfigured: !!GEMINI_URL_CHAT
     });
 
     const response = await fetch(`${GEMINI_URL_CHAT}?key=${GEMINI_API_KEY}`, {
@@ -413,6 +440,16 @@ Instructions:
           topP: 0.95,
           maxOutputTokens: 1024,
         },
+        safetySettings: [
+          {
+            category: "HARM_CATEGORY_HARASSMENT",
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          },
+          {
+            category: "HARM_CATEGORY_HATE_SPEECH", 
+            threshold: "BLOCK_MEDIUM_AND_ABOVE"
+          }
+        ]
       }),
     });
 
@@ -420,23 +457,87 @@ Instructions:
 
     if (!response.ok) {
       console.error("❌ Gemini Chat API Error:", data);
-      throw new Error(data.error?.message || "Gemini API request failed");
+      
+      // Handle specific API errors
+      if (response.status === 400) {
+        return res.status(500).json({
+          error: "Invalid request to AI service",
+          details: "The message could not be processed. Please try rephrasing your question."
+        });
+      } else if (response.status === 403) {
+        return res.status(500).json({
+          error: "AI service access denied",
+          details: "The AI service is currently unavailable. Please try again later."
+        });
+      } else if (response.status === 429) {
+        return res.status(500).json({
+          error: "Too many requests",
+          details: "The AI service is busy. Please wait a moment and try again."
+        });
+      }
+      
+      throw new Error(data.error?.message || `API error: ${response.status}`);
     }
 
-    const text =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text || "No response from AI";
+    // Check if candidates exist
+    if (!data.candidates || data.candidates.length === 0) {
+      console.error("❌ No candidates in response:", data);
+      return res.status(500).json({
+        error: "AI response unavailable",
+        details: "The AI couldn't generate a response. Please try asking your question differently."
+      });
+    }
+
+    const candidate = data.candidates[0];
+    
+    // Check for content filtering
+    if (candidate.finishReason === "SAFETY") {
+      console.log("⚠️ Content was filtered for safety");
+      return res.status(500).json({
+        error: "Content filtered",
+        details: "Your message was filtered for safety. Please try asking your question in a different way."
+      });
+    }
+
+    const text = candidate?.content?.parts?.[0]?.text;
+
+    if (!text || text.trim().length === 0) {
+      console.error("❌ No text in candidate:", candidate);
+      return res.status(500).json({
+        error: "Empty AI response",
+        details: "The AI couldn't generate a response. Please try asking your question again."
+      });
+    }
 
     console.log(
       "✅ AI Chat response received:",
       text.substring(0, 100) + "..."
     );
 
-    res.json({ success: true, reply: text });
+    res.json({ success: true, reply: text.trim() });
   } catch (error) {
     console.error("AI Chat Error:", error.message);
-    res
-      .status(500)
-      .json({ error: "Failed to process chat", details: error.message });
+    
+    // Handle network errors
+    if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      return res.status(500).json({
+        error: "Network error",
+        details: "Cannot connect to AI service. Please check your internet connection and try again."
+      });
+    }
+    
+    // Handle timeout errors
+    if (error.code === 'ETIMEDOUT') {
+      return res.status(500).json({
+        error: "Request timeout", 
+        details: "The AI service is taking too long to respond. Please try again."
+      });
+    }
+
+    res.status(500).json({ 
+      error: "Chat service error", 
+      details: "Something went wrong with the chat service. Please try again later."
+    });
   }
 });
 

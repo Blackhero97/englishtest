@@ -272,6 +272,23 @@ app.post("/api/results", async (req, res) => {
   }
 });
 
+// Delete a result
+app.delete("/api/results/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await Result.findByIdAndDelete(id);
+    
+    if (!result) {
+      return res.status(404).json({ error: "Result not found" });
+    }
+    
+    res.json({ message: "Result deleted successfully" });
+  } catch (error) {
+    console.error("Delete result error:", error);
+    res.status(500).json({ error: "Failed to delete result" });
+  }
+});
+
 // =========================
 // 🔹 AI ROUTES
 // =========================

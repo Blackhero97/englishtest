@@ -113,6 +113,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
   "https://missnoraenglish.netlify.app",
+  "https://englishtest-dbrs.onrender.com",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 

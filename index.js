@@ -120,7 +120,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true);   
       if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
@@ -186,6 +186,37 @@ const ResultSchema = new mongoose.Schema(
 );
 
 const Result = mongoose.model("Result", ResultSchema);
+
+// Lesson Schema
+const LessonSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    description: { type: String, default: "" },
+    category: { type: String, required: true },
+    level: { type: String, required: true },
+    duration: { type: String, default: "15 min" },
+    content: { type: String, required: true },
+    isDefault: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+const Lesson = mongoose.model("Lesson", LessonSchema);
+
+// User Schema for Google OAuth
+const UserSchema = new mongoose.Schema(
+  {
+    email: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    picture: { type: String },
+    googleId: { type: String },
+    firstName: { type: String },
+    lastName: { type: String },
+  },
+  { timestamps: true }
+);
+
+const User = mongoose.model("User", UserSchema);
 
 // =========================
 // 🔹 ROUTES
@@ -287,6 +318,234 @@ app.delete("/api/results/:id", async (req, res) => {
   } catch (error) {
     console.error("Delete result error:", error);
     res.status(500).json({ error: "Failed to delete result" });
+  }
+});
+
+// Generate PDF for a result
+app.get("/api/results/:id/pdf", async (req, res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const { id } = req.params;
+    const result = await Result.findById(id);
+    
+    if (!result) {
+      return res.status(404).json({ error: "Result not found" });
+    }
+
+    // Create PDF document
+    const doc = new PDFDocument({ margin: 50 });
+    
+    // Set response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=${result.firstName}_${result.lastName}_Results.pdf`);
+    
+    // Pipe PDF to response
+    doc.pipe(res);
+
+    // Header
+    doc.fontSize(24).font('Helvetica-Bold').text('English Test Results', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(12).font('Helvetica').fillColor('#666666')
+       .text(new Date(result.createdAt).toLocaleDateString('en-US', {
+         year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+       }), { align: 'center' });
+    doc.moveDown(2);
+
+    // Student Info Box
+    doc.fontSize(10).fillColor('#000000');
+    doc.rect(50, doc.y, 495, 60).fillAndStroke('#f0f9ff', '#3b82f6');
+    doc.fillColor('#1e40af').fontSize(12).font('Helvetica-Bold')
+       .text('Student Information', 60, doc.y + 15);
+    doc.fillColor('#000000').fontSize(10).font('Helvetica')
+       .text(`Name: ${result.firstName} ${result.lastName}`, 60, doc.y + 10)
+       .text(`Test: ${result.testName}`, 60, doc.y + 5);
+    doc.moveDown(3);
+
+    // Score Section
+    const totalQuestions = result.answers?.length || 0;
+    const correctAnswers = result.score || 0;
+    const percentage = totalQuestions > 0 ? ((correctAnswers / totalQuestions) * 100).toFixed(1) : 0;
+    
+    doc.rect(50, doc.y, 495, 80).fillAndStroke('#f0fdf4', '#22c55e');
+    doc.fillColor('#166534').fontSize(14).font('Helvetica-Bold')
+       .text('Final Score', 60, doc.y + 15);
+    doc.fontSize(32).text(`${percentage}%`, 60, doc.y + 10);
+    doc.fontSize(10).font('Helvetica')
+       .text(`${correctAnswers} out of ${totalQuestions} correct`, 60, doc.y + 5);
+    doc.moveDown(4);
+
+    // Performance Summary
+    doc.fillColor('#000000').fontSize(12).font('Helvetica-Bold').text('Performance Summary:');
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica');
+    doc.fillColor('#22c55e').text(`✓ Correct Answers: ${correctAnswers}`, { continued: true });
+    doc.fillColor('#000000').text(`  (${percentage}%)`);
+    doc.fillColor('#ef4444').text(`✗ Wrong Answers: ${totalQuestions - correctAnswers}`, { continued: true });
+    doc.fillColor('#000000').text(`  (${(100 - percentage).toFixed(1)}%)`);
+    doc.fillColor('#3b82f6').text(`⏱ Time Taken: ${result.timeTaken || result.testDuration} minutes`);
+    doc.moveDown(2);
+
+    // Question Details
+    if (result.answers && result.answers.length > 0) {
+      doc.fontSize(12).font('Helvetica-Bold').fillColor('#000000').text('Detailed Analysis:');
+      doc.moveDown(1);
+
+      result.answers.forEach((answer, index) => {
+        const isCorrect = answer.selectedAnswer === answer.correctAnswer;
+        
+        // Question number and status
+        doc.fontSize(10).font('Helvetica-Bold')
+           .fillColor(isCorrect ? '#22c55e' : '#ef4444')
+           .text(`Q${index + 1}. ${isCorrect ? '✓' : '✗'}`, { continued: true });
+        
+        doc.fillColor('#000000').font('Helvetica')
+           .text(` ${answer.question?.substring(0, 80)}${answer.question?.length > 80 ? '...' : ''}`);
+        
+        // Answers
+        doc.fontSize(9).fillColor('#666666')
+           .text(`   Your Answer: ${answer.selectedAnswer}`, { indent: 20 });
+        
+        if (!isCorrect) {
+          doc.fillColor('#22c55e')
+             .text(`   Correct Answer: ${answer.correctAnswer}`, { indent: 20 });
+        }
+        
+        doc.moveDown(0.5);
+        
+        // Add new page if needed
+        if (doc.y > 700) {
+          doc.addPage();
+        }
+      });
+    }
+
+    // Footer
+    doc.fontSize(8).fillColor('#999999')
+       .text('Generated by English Test Platform', 50, doc.page.height - 50, { align: 'center' });
+
+    // Finalize PDF
+    doc.end();
+    
+  } catch (error) {
+    console.error("PDF generation error:", error);
+    res.status(500).json({ error: "Failed to generate PDF" });
+  }
+});
+
+// ----- LESSON ROUTES -----
+app.get("/api/lessons", async (req, res) => {
+  try {
+    const lessons = await Lesson.find().sort({ createdAt: -1 });
+    res.json({ lessons });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch lessons" });
+  }
+});
+
+app.get("/api/lessons/:id", async (req, res) => {
+  try {
+    const lesson = await Lesson.findById(req.params.id);
+    if (!lesson) {
+      return res.status(404).json({ error: "Lesson not found" });
+    }
+    res.json({ lesson });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch lesson" });
+  }
+});
+
+app.post("/api/lessons", async (req, res) => {
+  try {
+    const lesson = new Lesson({
+      ...req.body,
+      id: `lesson-${Date.now()}`,
+    });
+    await lesson.save();
+    res.status(201).json({ message: "Lesson created successfully", lesson });
+  } catch (error) {
+    console.error("Create lesson error:", error);
+    res.status(500).json({ error: "Failed to create lesson" });
+  }
+});
+
+app.put("/api/lessons/:id", async (req, res) => {
+  try {
+    const lesson = await Lesson.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true }
+    );
+    if (!lesson) {
+      return res.status(404).json({ error: "Lesson not found" });
+    }
+    res.json({ message: "Lesson updated successfully", lesson });
+  } catch (error) {
+    console.error("Update lesson error:", error);
+    res.status(500).json({ error: "Failed to update lesson" });
+  }
+});
+
+app.delete("/api/lessons/:id", async (req, res) => {
+  try {
+    const lesson = await Lesson.findByIdAndDelete(req.params.id);
+    if (!lesson) {
+      return res.status(404).json({ error: "Lesson not found" });
+    }
+    res.json({ message: "Lesson deleted successfully" });
+  } catch (error) {
+    console.error("Delete lesson error:", error);
+    res.status(500).json({ error: "Failed to delete lesson" });
+  }
+});
+
+// =========================
+// 🔹 GOOGLE AUTH ENDPOINT
+// =========================
+
+app.post("/api/auth/google", async (req, res) => {
+  try {
+    const { email, name, picture, googleId } = req.body;
+
+    if (!email || !name) {
+      return res.status(400).json({ error: "Email and name are required" });
+    }
+
+    // Find or create user
+    let user = await User.findOne({ email });
+
+    if (user) {
+      // Update existing user
+      user.name = name;
+      user.picture = picture;
+      if (googleId) user.googleId = googleId;
+      await user.save();
+    } else {
+      // Create new user
+      user = new User({
+        email,
+        name,
+        picture,
+        googleId,
+        firstName: name.split(" ")[0] || "",
+        lastName: name.split(" ").slice(1).join(" ") || "",
+      });
+      await user.save();
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        picture: user.picture,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      },
+    });
+  } catch (error) {
+    console.error("Google auth error:", error);
+    res.status(500).json({ error: "Failed to authenticate user" });
   }
 });
 
@@ -468,6 +727,121 @@ Instructions:
     res
       .status(500)
       .json({ error: "Failed to process chat", details: error.message });
+  }
+});
+
+// 🔸 Generate Lesson Content (pro model)
+app.post("/api/ai/generate-lesson", async (req, res) => {
+  try {
+    const { title, level, category } = req.body;
+
+    if (!title || !level || !category) {
+      return res.status(400).json({ error: "Title, level, and category are required" });
+    }
+
+    if (!GEMINI_URL_CHAT || !GEMINI_API_KEY) {
+      return res.status(500).json({ error: "Gemini Chat API not configured" });
+    }
+
+    const prompt = `Create a comprehensive English lesson about "${title}" for ${level} level students in the ${category} category.
+
+Structure the lesson in Markdown format with the following sections:
+
+# ${title}
+
+## Introduction
+Brief overview of the topic (2-3 sentences)
+
+## Key Concepts
+Main points to learn (3-5 bullet points)
+
+## Detailed Explanation
+In-depth explanation with examples
+
+## Practice Examples
+5-7 practical examples with clear demonstrations
+
+## Common Mistakes
+3-4 common mistakes students make and how to avoid them
+
+## Practice Exercises
+3-5 exercises for students to practice
+
+## Summary
+Key takeaways (2-3 sentences)
+
+Make it engaging, clear, and appropriate for ${level} level. Use simple language and provide plenty of examples. The lesson should take about 15-25 minutes to read and understand.`;
+
+    console.log("🤖 Generating lesson content for:", title);
+
+    const response = await fetch(GEMINI_URL_CHAT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
+      },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 4096,
+        },
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("❌ Gemini Lesson API Error:", data);
+      throw new Error(data.error?.message || "Gemini API request failed");
+    }
+
+    if (!data.candidates || data.candidates.length === 0) {
+      throw new Error("AI did not generate lesson content");
+    }
+
+    const content = data.candidates[0]?.content?.parts?.[0]?.text;
+
+    if (!content) {
+      throw new Error("AI response was empty");
+    }
+
+    // Generate a brief description from the content
+    const descriptionPrompt = `Based on this lesson content, write a brief 1-sentence description (max 100 characters):\n\n${content.substring(0, 500)}`;
+    
+    const descResponse = await fetch(GEMINI_URL_CHAT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
+      },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: descriptionPrompt }] }],
+        generationConfig: {
+          temperature: 0.5,
+          maxOutputTokens: 100,
+        },
+      }),
+    });
+
+    const descData = await descResponse.json();
+    const description = descData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || `Learn about ${title}`;
+
+    console.log("✅ Lesson content generated successfully");
+
+    res.json({ 
+      success: true, 
+      content,
+      description: description.substring(0, 150) // Limit to 150 chars
+    });
+  } catch (error) {
+    console.error("AI Lesson Generation Error:", error.message);
+    res.status(500).json({ 
+      error: "Failed to generate lesson", 
+      details: error.message 
+    });
   }
 });
 

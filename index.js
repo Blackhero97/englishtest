@@ -180,7 +180,14 @@ const ResultSchema = new mongoose.Schema(
     totalQuestions: { type: Number, required: true },
     correctAnswers: { type: Number, required: true },
     wrongAnswers: { type: Number, required: true },
-    answers: [Number],
+    answers: [
+      {
+        question: String,
+        options: [String],
+        correctAnswer: Number,
+        selectedAnswer: Number,
+      }
+    ],
   },
   { timestamps: true }
 );

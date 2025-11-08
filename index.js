@@ -686,54 +686,106 @@ Instructions:
       message: message.substring(0, 50),
     });
 
-    const response = await fetch(`${GEMINI_URL_CHAT}?key=${GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.8,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 4096,
-        },
-      }),
-    });
+    // Retry logic with exponential backoff
+    const maxRetries = 3;
+    let lastError = null;
+    
+    // Try with fallback models if primary fails
+    const modelsToTry = [
+      GEMINI_URL_CHAT,
+      GEMINI_URL_TEST, // fallback to test model
+      "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent",
+      "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
+    ].filter(Boolean);
 
-    const data = await response.json();
+    for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
+      const currentModel = modelsToTry[modelIndex];
+      
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const response = await fetch(`${currentModel}?key=${GEMINI_API_KEY}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: {
+                temperature: 0.8,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 4096,
+              },
+            }),
+          });
 
-    if (!response.ok) {
-      console.error("❌ Gemini Chat API Error:", data);
-      throw new Error(data.error?.message || "Gemini API request failed");
+          const data = await response.json();
+
+          if (!response.ok) {
+            // Check if it's an overload error
+            if (data.error?.status === "UNAVAILABLE" || data.error?.message?.includes("overloaded")) {
+              console.warn(`⚠️ Model overloaded (attempt ${attempt + 1}/${maxRetries}):`, data.error?.message);
+              lastError = new Error(data.error?.message || "Model is overloaded");
+              
+              // Wait before retry (exponential backoff)
+              if (attempt < maxRetries - 1) {
+                const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+                console.log(`⏳ Waiting ${delay}ms before retry...`);
+                await new Promise(r => setTimeout(r, delay));
+                continue; // Try again with same model
+              } else {
+                // Move to next model
+                break;
+              }
+            }
+            
+            console.error("❌ Gemini Chat API Error:", data);
+            throw new Error(data.error?.message || "Gemini API request failed");
+          }
+
+          // Debug: Log full response
+          console.log("🔍 Full Gemini Response:", JSON.stringify(data, null, 2));
+
+          // Check if candidates exist
+          if (!data.candidates || data.candidates.length === 0) {
+            console.error("❌ No candidates in response:", data);
+            throw new Error("AI did not generate a response. Please try again.");
+          }
+
+          const text = data.candidates[0]?.content?.parts?.[0]?.text;
+
+          if (!text) {
+            console.error("❌ No text in candidate:", data.candidates[0]);
+            throw new Error("AI response was empty. Please try again.");
+          }
+
+          console.log(
+            "✅ AI Chat response received:",
+            text.substring(0, 100) + "..."
+          );
+
+          return res.json({ success: true, reply: text });
+        } catch (error) {
+          lastError = error;
+          console.error(`❌ Attempt ${attempt + 1} failed:`, error.message);
+          
+          if (attempt === maxRetries - 1) {
+            // Last attempt with this model failed, try next model
+            break;
+          }
+        }
+      }
     }
+    
+    // If we got here, all models and retries failed
+    throw lastError || new Error("All AI models are currently unavailable");
 
-    // Debug: Log full response
-    console.log("🔍 Full Gemini Response:", JSON.stringify(data, null, 2));
-
-    // Check if candidates exist
-    if (!data.candidates || data.candidates.length === 0) {
-      console.error("❌ No candidates in response:", data);
-      throw new Error("AI did not generate a response. Please try again.");
-    }
-
-    const text = data.candidates[0]?.content?.parts?.[0]?.text;
-
-    if (!text) {
-      console.error("❌ No text in candidate:", data.candidates[0]);
-      throw new Error("AI response was empty. Please try again.");
-    }
-
-    console.log(
-      "✅ AI Chat response received:",
-      text.substring(0, 100) + "..."
-    );
-
-    res.json({ success: true, reply: text });
   } catch (error) {
     console.error("AI Chat Error:", error.message);
     res
-      .status(500)
-      .json({ error: "Failed to process chat", details: error.message });
+      .status(503)
+      .json({ 
+        error: "AI service temporarily unavailable. Please try again in a moment.", 
+        details: error.message 
+      });
   }
 });
 

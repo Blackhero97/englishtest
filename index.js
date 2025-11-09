@@ -508,7 +508,17 @@ app.get("/api/results/:id/pdf", async (req, res) => {
 app.get("/api/lessons", async (req, res) => {
   try {
     const lessons = await Lesson.find().sort({ createdAt: -1 });
-    res.json({ lessons });
+
+    // Ensure all lessons have id field
+    const lessonsWithId = lessons.map((lesson) => {
+      const lessonObj = lesson.toObject();
+      return {
+        ...lessonObj,
+        id: lessonObj.id || lessonObj._id.toString(),
+      };
+    });
+
+    res.json({ lessons: lessonsWithId });
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch lessons" });
   }
@@ -527,7 +537,15 @@ app.get("/api/lessons/:id", async (req, res) => {
     if (!lesson) {
       return res.status(404).json({ error: "Lesson not found" });
     }
-    res.json({ lesson });
+
+    // Convert to plain object and ensure id is included
+    const lessonObj = lesson.toObject();
+    res.json({
+      lesson: {
+        ...lessonObj,
+        id: lessonObj.id || lessonObj._id.toString(), // Use custom id or MongoDB _id
+      },
+    });
   } catch (error) {
     console.error("Fetch lesson error:", error);
     res.status(500).json({ error: "Failed to fetch lesson" });

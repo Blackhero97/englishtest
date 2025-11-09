@@ -3,11 +3,11 @@ const mongoose = require("mongoose");
 const { defaultLessons } = require("./defaultLessonsData.js");
 
 // MongoDB connection
-const MONGO_URI =
-  process.env.MONGO_URI || "mongodb://localhost:27017/english-test";
+const MONGODB_URI =
+  process.env.MONGODB_URI || "mongodb://localhost:27017/english-test";
 
 mongoose
-  .connect(MONGO_URI)
+  .connect(MONGODB_URI)
   .then(() => console.log("✅ MongoDB Connected for seeding"))
   .catch((err) => {
     console.error("❌ MongoDB connection failed:", err);

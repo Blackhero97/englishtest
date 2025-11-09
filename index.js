@@ -536,12 +536,25 @@ app.get("/api/lessons/:id", async (req, res) => {
 
 app.post("/api/lessons", async (req, res) => {
   try {
-    const lesson = new Lesson({
+    const lessonData = {
       ...req.body,
       id: `lesson-${Date.now()}`,
-    });
+      isDefault: false,
+    };
+
+    const lesson = new Lesson(lessonData);
     await lesson.save();
-    res.status(201).json({ message: "Lesson created successfully", lesson });
+
+    // Convert to plain object and ensure id is included
+    const lessonObj = lesson.toObject();
+
+    res.status(201).json({
+      message: "Lesson created successfully",
+      lesson: {
+        ...lessonObj,
+        id: lessonObj.id || lessonData.id, // Ensure id is always present
+      },
+    });
   } catch (error) {
     console.error("Create lesson error:", error);
     res.status(500).json({ error: "Failed to create lesson" });

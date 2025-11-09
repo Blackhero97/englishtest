@@ -598,7 +598,16 @@ app.put("/api/lessons/:id", async (req, res) => {
     if (!lesson) {
       return res.status(404).json({ error: "Lesson not found" });
     }
-    res.json({ message: "Lesson updated successfully", lesson });
+
+    // Convert to plain object and ensure id is included
+    const lessonObj = lesson.toObject();
+    res.json({
+      message: "Lesson updated successfully",
+      lesson: {
+        ...lessonObj,
+        id: lessonObj.id || lessonObj._id.toString(),
+      },
+    });
   } catch (error) {
     console.error("Update lesson error:", error);
     res.status(500).json({ error: "Failed to update lesson" });

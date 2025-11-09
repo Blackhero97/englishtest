@@ -120,7 +120,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true);   
+      if (!origin) return callback(null, true);
       if (allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
@@ -186,7 +186,7 @@ const ResultSchema = new mongoose.Schema(
         options: [String],
         correctAnswer: Number,
         selectedAnswer: Number,
-      }
+      },
     ],
   },
   { timestamps: true }
@@ -316,11 +316,11 @@ app.delete("/api/results/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const result = await Result.findByIdAndDelete(id);
-    
+
     if (!result) {
       return res.status(404).json({ error: "Result not found" });
     }
-    
+
     res.json({ message: "Result deleted successfully" });
   } catch (error) {
     console.error("Delete result error:", error);
@@ -331,94 +331,155 @@ app.delete("/api/results/:id", async (req, res) => {
 // Generate PDF for a result
 app.get("/api/results/:id/pdf", async (req, res) => {
   try {
-    const PDFDocument = require('pdfkit');
+    const PDFDocument = require("pdfkit");
     const { id } = req.params;
     const result = await Result.findById(id);
-    
+
     if (!result) {
       return res.status(404).json({ error: "Result not found" });
     }
 
     // Create PDF document
     const doc = new PDFDocument({ margin: 50 });
-    
+
     // Set response headers
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=${result.firstName}_${result.lastName}_Results.pdf`);
-    
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=${result.firstName}_${result.lastName}_Results.pdf`
+    );
+
     // Pipe PDF to response
     doc.pipe(res);
 
     // Header
-    doc.fontSize(24).font('Helvetica-Bold').text('English Test Results', { align: 'center' });
+    doc
+      .fontSize(24)
+      .font("Helvetica-Bold")
+      .text("English Test Results", { align: "center" });
     doc.moveDown(0.5);
-    doc.fontSize(12).font('Helvetica').fillColor('#666666')
-       .text(new Date(result.createdAt).toLocaleDateString('en-US', {
-         year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-       }), { align: 'center' });
+    doc
+      .fontSize(12)
+      .font("Helvetica")
+      .fillColor("#666666")
+      .text(
+        new Date(result.createdAt).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        { align: "center" }
+      );
     doc.moveDown(2);
 
     // Student Info Box
-    doc.fontSize(10).fillColor('#000000');
-    doc.rect(50, doc.y, 495, 60).fillAndStroke('#f0f9ff', '#3b82f6');
-    doc.fillColor('#1e40af').fontSize(12).font('Helvetica-Bold')
-       .text('Student Information', 60, doc.y + 15);
-    doc.fillColor('#000000').fontSize(10).font('Helvetica')
-       .text(`Name: ${result.firstName} ${result.lastName}`, 60, doc.y + 10)
-       .text(`Test: ${result.testName}`, 60, doc.y + 5);
+    doc.fontSize(10).fillColor("#000000");
+    doc.rect(50, doc.y, 495, 60).fillAndStroke("#f0f9ff", "#3b82f6");
+    doc
+      .fillColor("#1e40af")
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .text("Student Information", 60, doc.y + 15);
+    doc
+      .fillColor("#000000")
+      .fontSize(10)
+      .font("Helvetica")
+      .text(`Name: ${result.firstName} ${result.lastName}`, 60, doc.y + 10)
+      .text(`Test: ${result.testName}`, 60, doc.y + 5);
     doc.moveDown(3);
 
     // Score Section
     const totalQuestions = result.answers?.length || 0;
     const correctAnswers = result.score || 0;
-    const percentage = totalQuestions > 0 ? ((correctAnswers / totalQuestions) * 100).toFixed(1) : 0;
-    
-    doc.rect(50, doc.y, 495, 80).fillAndStroke('#f0fdf4', '#22c55e');
-    doc.fillColor('#166534').fontSize(14).font('Helvetica-Bold')
-       .text('Final Score', 60, doc.y + 15);
+    const percentage =
+      totalQuestions > 0
+        ? ((correctAnswers / totalQuestions) * 100).toFixed(1)
+        : 0;
+
+    doc.rect(50, doc.y, 495, 80).fillAndStroke("#f0fdf4", "#22c55e");
+    doc
+      .fillColor("#166534")
+      .fontSize(14)
+      .font("Helvetica-Bold")
+      .text("Final Score", 60, doc.y + 15);
     doc.fontSize(32).text(`${percentage}%`, 60, doc.y + 10);
-    doc.fontSize(10).font('Helvetica')
-       .text(`${correctAnswers} out of ${totalQuestions} correct`, 60, doc.y + 5);
+    doc
+      .fontSize(10)
+      .font("Helvetica")
+      .text(
+        `${correctAnswers} out of ${totalQuestions} correct`,
+        60,
+        doc.y + 5
+      );
     doc.moveDown(4);
 
     // Performance Summary
-    doc.fillColor('#000000').fontSize(12).font('Helvetica-Bold').text('Performance Summary:');
+    doc
+      .fillColor("#000000")
+      .fontSize(12)
+      .font("Helvetica-Bold")
+      .text("Performance Summary:");
     doc.moveDown(0.5);
-    doc.fontSize(10).font('Helvetica');
-    doc.fillColor('#22c55e').text(`✓ Correct Answers: ${correctAnswers}`, { continued: true });
-    doc.fillColor('#000000').text(`  (${percentage}%)`);
-    doc.fillColor('#ef4444').text(`✗ Wrong Answers: ${totalQuestions - correctAnswers}`, { continued: true });
-    doc.fillColor('#000000').text(`  (${(100 - percentage).toFixed(1)}%)`);
-    doc.fillColor('#3b82f6').text(`⏱ Time Taken: ${result.timeTaken || result.testDuration} minutes`);
+    doc.fontSize(10).font("Helvetica");
+    doc
+      .fillColor("#22c55e")
+      .text(`✓ Correct Answers: ${correctAnswers}`, { continued: true });
+    doc.fillColor("#000000").text(`  (${percentage}%)`);
+    doc
+      .fillColor("#ef4444")
+      .text(`✗ Wrong Answers: ${totalQuestions - correctAnswers}`, {
+        continued: true,
+      });
+    doc.fillColor("#000000").text(`  (${(100 - percentage).toFixed(1)}%)`);
+    doc
+      .fillColor("#3b82f6")
+      .text(`⏱ Time Taken: ${result.timeTaken || result.testDuration} minutes`);
     doc.moveDown(2);
 
     // Question Details
     if (result.answers && result.answers.length > 0) {
-      doc.fontSize(12).font('Helvetica-Bold').fillColor('#000000').text('Detailed Analysis:');
+      doc
+        .fontSize(12)
+        .font("Helvetica-Bold")
+        .fillColor("#000000")
+        .text("Detailed Analysis:");
       doc.moveDown(1);
 
       result.answers.forEach((answer, index) => {
         const isCorrect = answer.selectedAnswer === answer.correctAnswer;
-        
+
         // Question number and status
-        doc.fontSize(10).font('Helvetica-Bold')
-           .fillColor(isCorrect ? '#22c55e' : '#ef4444')
-           .text(`Q${index + 1}. ${isCorrect ? '✓' : '✗'}`, { continued: true });
-        
-        doc.fillColor('#000000').font('Helvetica')
-           .text(` ${answer.question?.substring(0, 80)}${answer.question?.length > 80 ? '...' : ''}`);
-        
+        doc
+          .fontSize(10)
+          .font("Helvetica-Bold")
+          .fillColor(isCorrect ? "#22c55e" : "#ef4444")
+          .text(`Q${index + 1}. ${isCorrect ? "✓" : "✗"}`, { continued: true });
+
+        doc
+          .fillColor("#000000")
+          .font("Helvetica")
+          .text(
+            ` ${answer.question?.substring(0, 80)}${
+              answer.question?.length > 80 ? "..." : ""
+            }`
+          );
+
         // Answers
-        doc.fontSize(9).fillColor('#666666')
-           .text(`   Your Answer: ${answer.selectedAnswer}`, { indent: 20 });
-        
+        doc
+          .fontSize(9)
+          .fillColor("#666666")
+          .text(`   Your Answer: ${answer.selectedAnswer}`, { indent: 20 });
+
         if (!isCorrect) {
-          doc.fillColor('#22c55e')
-             .text(`   Correct Answer: ${answer.correctAnswer}`, { indent: 20 });
+          doc
+            .fillColor("#22c55e")
+            .text(`   Correct Answer: ${answer.correctAnswer}`, { indent: 20 });
         }
-        
+
         doc.moveDown(0.5);
-        
+
         // Add new page if needed
         if (doc.y > 700) {
           doc.addPage();
@@ -427,12 +488,15 @@ app.get("/api/results/:id/pdf", async (req, res) => {
     }
 
     // Footer
-    doc.fontSize(8).fillColor('#999999')
-       .text('Generated by English Test Platform', 50, doc.page.height - 50, { align: 'center' });
+    doc
+      .fontSize(8)
+      .fillColor("#999999")
+      .text("Generated by English Test Platform", 50, doc.page.height - 50, {
+        align: "center",
+      });
 
     // Finalize PDF
     doc.end();
-    
   } catch (error) {
     console.error("PDF generation error:", error);
     res.status(500).json({ error: "Failed to generate PDF" });
@@ -477,11 +541,9 @@ app.post("/api/lessons", async (req, res) => {
 
 app.put("/api/lessons/:id", async (req, res) => {
   try {
-    const lesson = await Lesson.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
+    const lesson = await Lesson.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
     if (!lesson) {
       return res.status(404).json({ error: "Lesson not found" });
     }
@@ -689,65 +751,81 @@ Instructions:
     // Retry logic with exponential backoff
     const maxRetries = 3;
     let lastError = null;
-    
+
     // Try with fallback models if primary fails
     const modelsToTry = [
       GEMINI_URL_CHAT,
       GEMINI_URL_TEST, // fallback to test model
       "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent",
-      "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent"
+      "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent",
     ].filter(Boolean);
 
     for (let modelIndex = 0; modelIndex < modelsToTry.length; modelIndex++) {
       const currentModel = modelsToTry[modelIndex];
-      
+
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-          const response = await fetch(`${currentModel}?key=${GEMINI_API_KEY}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts: [{ text: prompt }] }],
-              generationConfig: {
-                temperature: 0.8,
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 4096,
-              },
-            }),
-          });
+          const response = await fetch(
+            `${currentModel}?key=${GEMINI_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ role: "user", parts: [{ text: prompt }] }],
+                generationConfig: {
+                  temperature: 0.8,
+                  topK: 40,
+                  topP: 0.95,
+                  maxOutputTokens: 4096,
+                },
+              }),
+            }
+          );
 
           const data = await response.json();
 
           if (!response.ok) {
             // Check if it's an overload error
-            if (data.error?.status === "UNAVAILABLE" || data.error?.message?.includes("overloaded")) {
-              console.warn(`⚠️ Model overloaded (attempt ${attempt + 1}/${maxRetries}):`, data.error?.message);
-              lastError = new Error(data.error?.message || "Model is overloaded");
-              
+            if (
+              data.error?.status === "UNAVAILABLE" ||
+              data.error?.message?.includes("overloaded")
+            ) {
+              console.warn(
+                `⚠️ Model overloaded (attempt ${attempt + 1}/${maxRetries}):`,
+                data.error?.message
+              );
+              lastError = new Error(
+                data.error?.message || "Model is overloaded"
+              );
+
               // Wait before retry (exponential backoff)
               if (attempt < maxRetries - 1) {
                 const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
                 console.log(`⏳ Waiting ${delay}ms before retry...`);
-                await new Promise(r => setTimeout(r, delay));
+                await new Promise((r) => setTimeout(r, delay));
                 continue; // Try again with same model
               } else {
                 // Move to next model
                 break;
               }
             }
-            
+
             console.error("❌ Gemini Chat API Error:", data);
             throw new Error(data.error?.message || "Gemini API request failed");
           }
 
           // Debug: Log full response
-          console.log("🔍 Full Gemini Response:", JSON.stringify(data, null, 2));
+          console.log(
+            "🔍 Full Gemini Response:",
+            JSON.stringify(data, null, 2)
+          );
 
           // Check if candidates exist
           if (!data.candidates || data.candidates.length === 0) {
             console.error("❌ No candidates in response:", data);
-            throw new Error("AI did not generate a response. Please try again.");
+            throw new Error(
+              "AI did not generate a response. Please try again."
+            );
           }
 
           const text = data.candidates[0]?.content?.parts?.[0]?.text;
@@ -766,7 +844,7 @@ Instructions:
         } catch (error) {
           lastError = error;
           console.error(`❌ Attempt ${attempt + 1} failed:`, error.message);
-          
+
           if (attempt === maxRetries - 1) {
             // Last attempt with this model failed, try next model
             break;
@@ -774,18 +852,16 @@ Instructions:
         }
       }
     }
-    
+
     // If we got here, all models and retries failed
     throw lastError || new Error("All AI models are currently unavailable");
-
   } catch (error) {
     console.error("AI Chat Error:", error.message);
-    res
-      .status(503)
-      .json({ 
-        error: "AI service temporarily unavailable. Please try again in a moment.", 
-        details: error.message 
-      });
+    res.status(503).json({
+      error:
+        "AI service temporarily unavailable. Please try again in a moment.",
+      details: error.message,
+    });
   }
 });
 
@@ -795,7 +871,9 @@ app.post("/api/ai/generate-lesson", async (req, res) => {
     const { title, level, category } = req.body;
 
     if (!title || !level || !category) {
-      return res.status(400).json({ error: "Title, level, and category are required" });
+      return res
+        .status(400)
+        .json({ error: "Title, level, and category are required" });
     }
 
     if (!GEMINI_URL_CHAT || !GEMINI_API_KEY) {
@@ -833,73 +911,142 @@ Make it engaging, clear, and appropriate for ${level} level. Use simple language
 
     console.log("🤖 Generating lesson content for:", title);
 
-    const response = await fetch(GEMINI_URL_CHAT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 4096,
-        },
-      }),
-    });
+    // Retry logic with exponential backoff
+    let lastError = null;
+    const maxRetries = 3;
+    const retryDelay = 2000; // 2 seconds
+    let content = null;
 
-    const data = await response.json();
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(
+          `📡 Attempt ${attempt}/${maxRetries} to generate lesson...`
+        );
 
-    if (!response.ok) {
-      console.error("❌ Gemini Lesson API Error:", data);
-      throw new Error(data.error?.message || "Gemini API request failed");
+        const response = await fetch(GEMINI_URL_CHAT, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY,
+          },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 3072, // Reduced to avoid overload
+            },
+          }),
+        });
+
+        const data = await response.json();
+
+        // Check for overload error specifically
+        if (
+          data.error?.code === 503 ||
+          data.error?.message?.includes("overloaded")
+        ) {
+          console.warn(
+            `⚠️ Model overloaded on attempt ${attempt}, retrying...`
+          );
+          lastError = new Error(
+            "The AI model is currently overloaded. Please try again in a moment."
+          );
+
+          if (attempt < maxRetries) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, retryDelay * attempt)
+            );
+            continue;
+          }
+        }
+
+        if (!response.ok) {
+          console.error("❌ Gemini Lesson API Error:", data);
+          throw new Error(data.error?.message || "Gemini API request failed");
+        }
+
+        if (!data.candidates || data.candidates.length === 0) {
+          throw new Error("AI did not generate lesson content");
+        }
+
+        content = data.candidates[0]?.content?.parts?.[0]?.text;
+
+        if (!content) {
+          throw new Error("AI response was empty");
+        }
+
+        // Success! Break out of retry loop
+        console.log("✅ Lesson content generated successfully!");
+        break;
+      } catch (attemptError) {
+        console.error(`❌ Attempt ${attempt} failed:`, attemptError.message);
+        lastError = attemptError;
+
+        if (attempt < maxRetries) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelay * attempt)
+          );
+        }
+      }
     }
 
-    if (!data.candidates || data.candidates.length === 0) {
-      throw new Error("AI did not generate lesson content");
-    }
-
-    const content = data.candidates[0]?.content?.parts?.[0]?.text;
-
+    // If all retries failed, throw the last error
     if (!content) {
-      throw new Error("AI response was empty");
+      throw lastError || new Error("Failed to generate lesson content");
     }
 
-    // Generate a brief description from the content
-    const descriptionPrompt = `Based on this lesson content, write a brief 1-sentence description (max 100 characters):\n\n${content.substring(0, 500)}`;
-    
-    const descResponse = await fetch(GEMINI_URL_CHAT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: descriptionPrompt }] }],
-        generationConfig: {
-          temperature: 0.5,
-          maxOutputTokens: 100,
+    // Generate a brief description
+    let description = `Learn about ${title} for ${level} level`;
+
+    try {
+      const descriptionPrompt = `Based on this lesson content, write a brief 1-sentence description (max 100 characters):\n\n${content.substring(
+        0,
+        500
+      )}`;
+
+      const descResponse = await fetch(GEMINI_URL_CHAT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY,
         },
-      }),
-    });
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: descriptionPrompt }] }],
+          generationConfig: {
+            temperature: 0.5,
+            maxOutputTokens: 100,
+          },
+        }),
+      });
 
-    const descData = await descResponse.json();
-    const description = descData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || `Learn about ${title}`;
+      if (descResponse.ok) {
+        const descData = await descResponse.json();
+        const generatedDesc =
+          descData.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (generatedDesc) {
+          description = generatedDesc
+            .trim()
+            .replace(/["']/g, "")
+            .substring(0, 150);
+        }
+      }
+    } catch (descError) {
+      console.warn("⚠️ Could not generate description, using default");
+    }
 
-    console.log("✅ Lesson content generated successfully");
-
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       content,
-      description: description.substring(0, 150) // Limit to 150 chars
+      description,
+      duration: "20 min",
     });
   } catch (error) {
     console.error("AI Lesson Generation Error:", error.message);
-    res.status(500).json({ 
-      error: "Failed to generate lesson", 
-      details: error.message 
+    res.status(500).json({
+      error: "Failed to generate lesson",
+      details: error.message,
     });
   }
 });

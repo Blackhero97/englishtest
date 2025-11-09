@@ -518,12 +518,12 @@ app.get("/api/lessons/:id", async (req, res) => {
   try {
     // Try to find by custom 'id' field first, then by MongoDB _id
     let lesson = await Lesson.findOne({ id: req.params.id });
-    
+
     if (!lesson) {
       // If not found by custom id, try MongoDB _id
       lesson = await Lesson.findById(req.params.id);
     }
-    
+
     if (!lesson) {
       return res.status(404).json({ error: "Lesson not found" });
     }
@@ -556,14 +556,14 @@ app.put("/api/lessons/:id", async (req, res) => {
       req.body,
       { new: true }
     );
-    
+
     if (!lesson) {
       // If not found by custom id, try MongoDB _id
       lesson = await Lesson.findByIdAndUpdate(req.params.id, req.body, {
         new: true,
       });
     }
-    
+
     if (!lesson) {
       return res.status(404).json({ error: "Lesson not found" });
     }
@@ -578,12 +578,12 @@ app.delete("/api/lessons/:id", async (req, res) => {
   try {
     // Try to find and delete by custom 'id' field first, then by MongoDB _id
     let lesson = await Lesson.findOneAndDelete({ id: req.params.id });
-    
+
     if (!lesson) {
       // If not found by custom id, try MongoDB _id
       lesson = await Lesson.findByIdAndDelete(req.params.id);
     }
-    
+
     if (!lesson) {
       return res.status(404).json({ error: "Lesson not found" });
     }

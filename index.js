@@ -197,6 +197,7 @@ const Result = mongoose.model("Result", ResultSchema);
 // Lesson Schema
 const LessonSchema = new mongoose.Schema(
   {
+    id: { type: String, unique: true, sparse: true },
     title: { type: String, required: true },
     description: { type: String, default: "" },
     category: { type: String, required: true },
@@ -515,12 +516,20 @@ app.get("/api/lessons", async (req, res) => {
 
 app.get("/api/lessons/:id", async (req, res) => {
   try {
-    const lesson = await Lesson.findById(req.params.id);
+    // Try to find by custom 'id' field first, then by MongoDB _id
+    let lesson = await Lesson.findOne({ id: req.params.id });
+    
+    if (!lesson) {
+      // If not found by custom id, try MongoDB _id
+      lesson = await Lesson.findById(req.params.id);
+    }
+    
     if (!lesson) {
       return res.status(404).json({ error: "Lesson not found" });
     }
     res.json({ lesson });
   } catch (error) {
+    console.error("Fetch lesson error:", error);
     res.status(500).json({ error: "Failed to fetch lesson" });
   }
 });
@@ -541,9 +550,20 @@ app.post("/api/lessons", async (req, res) => {
 
 app.put("/api/lessons/:id", async (req, res) => {
   try {
-    const lesson = await Lesson.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-    });
+    // Try to find and update by custom 'id' field first, then by MongoDB _id
+    let lesson = await Lesson.findOneAndUpdate(
+      { id: req.params.id },
+      req.body,
+      { new: true }
+    );
+    
+    if (!lesson) {
+      // If not found by custom id, try MongoDB _id
+      lesson = await Lesson.findByIdAndUpdate(req.params.id, req.body, {
+        new: true,
+      });
+    }
+    
     if (!lesson) {
       return res.status(404).json({ error: "Lesson not found" });
     }
@@ -556,7 +576,14 @@ app.put("/api/lessons/:id", async (req, res) => {
 
 app.delete("/api/lessons/:id", async (req, res) => {
   try {
-    const lesson = await Lesson.findByIdAndDelete(req.params.id);
+    // Try to find and delete by custom 'id' field first, then by MongoDB _id
+    let lesson = await Lesson.findOneAndDelete({ id: req.params.id });
+    
+    if (!lesson) {
+      // If not found by custom id, try MongoDB _id
+      lesson = await Lesson.findByIdAndDelete(req.params.id);
+    }
+    
     if (!lesson) {
       return res.status(404).json({ error: "Lesson not found" });
     }

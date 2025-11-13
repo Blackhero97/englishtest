@@ -694,27 +694,28 @@ app.post("/api/ai/generate-test", async (req, res) => {
   try {
     const { topic, difficulty, questionCount } = req.body;
 
-    const prompt = `You are an English test generator. Create ${
-      questionCount || 5
-    } multiple-choice questions about "${topic || "General English"}".
-Difficulty level: ${difficulty || "intermediate"}
+    const prompt = `Generate ${questionCount || 5} English test questions about "${topic || "General English"}" at ${difficulty || "intermediate"} level.
 
-IMPORTANT: Return ONLY valid JSON in this EXACT format (no markdown, no explanation):
+OUTPUT FORMAT - Return ONLY this JSON structure with NO additional text, NO markdown, NO explanation:
+
 {
   "questions": [
     {
-      "question": "Your question text here?",
+      "question": "Question text goes here?",
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "answer": 0
     }
   ]
 }
 
-Rules:
-- "answer" is the index (0-3) of the correct option
-- Each question must have exactly 4 options
-- Questions must test English grammar, vocabulary, or comprehension
-- Return ONLY the JSON object, nothing else`;
+STRICT RULES:
+1. "answer" must be index 0, 1, 2, or 3 (not the text)
+2. Exactly 4 options per question
+3. Test English grammar, vocabulary, or reading comprehension
+4. Return raw JSON only - no markdown code blocks
+5. Start response immediately with { character
+
+Generate ${questionCount || 5} questions now:`;
 
     console.log("🤖 Generating AI questions for:", topic);
 
@@ -778,24 +779,57 @@ Rules:
     }
 
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    console.log("📥 AI Response:", text.substring(0, 200) + "...");
+    console.log("📥 AI Response (first 300 chars):", text.substring(0, 300));
 
-    // Remove markdown code blocks if present
-    let cleanText = text
-      .replace(/```json\n?/g, "")
-      .replace(/```\n?/g, "")
-      .trim();
-
-    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("❌ No JSON found in response:", text);
-      throw new Error("AI did not return valid JSON format");
+    if (!text || text.length < 10) {
+      console.error("❌ Empty or too short response from AI");
+      throw new Error("AI returned empty response");
     }
 
-    const aiData = JSON.parse(jsonMatch[0]);
+    // Try multiple cleaning strategies
+    let cleanText = text.trim();
+    
+    // Remove markdown code blocks
+    cleanText = cleanText
+      .replace(/```json\s*/gi, "")
+      .replace(/```javascript\s*/gi, "")
+      .replace(/```\s*/g, "")
+      .trim();
+    
+    // Try to find JSON object
+    let jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+    
+    if (!jsonMatch) {
+      // If no match, try finding just the array part
+      jsonMatch = cleanText.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        // Wrap array in questions object
+        cleanText = `{"questions": ${jsonMatch[0]}}`;
+        jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+      }
+    }
+    
+    if (!jsonMatch) {
+      console.error("❌ No JSON found in response. Full text:", text);
+      throw new Error("AI did not return valid JSON format. Response: " + text.substring(0, 200));
+    }
+
+    let aiData;
+    try {
+      aiData = JSON.parse(jsonMatch[0]);
+    } catch (parseError) {
+      console.error("❌ JSON parse error:", parseError.message);
+      console.error("Attempted to parse:", jsonMatch[0].substring(0, 200));
+      throw new Error("Invalid JSON format from AI: " + parseError.message);
+    }
 
     if (!aiData.questions || !Array.isArray(aiData.questions)) {
-      throw new Error("Invalid questions format");
+      console.error("❌ Invalid structure:", aiData);
+      throw new Error("Invalid questions format - expected 'questions' array");
+    }
+    
+    if (aiData.questions.length === 0) {
+      throw new Error("AI returned empty questions array");
     }
 
     res.json({

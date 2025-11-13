@@ -692,9 +692,46 @@ app.post("/api/auth/google", async (req, res) => {
 // 🔸 Generate Test Questions (flash model)
 app.post("/api/ai/generate-test", async (req, res) => {
   try {
-    const { topic, difficulty, questionCount } = req.body;
+    const { topic, context, difficulty, questionCount } = req.body;
 
-    const prompt = `Generate ${questionCount || 5} English test questions about "${topic || "General English"}" at ${difficulty || "intermediate"} level.
+    // Build prompt based on whether context is provided
+    let prompt;
+    
+    if (context && context.trim()) {
+      // Generate questions based on provided context/material
+      prompt = `You are an English test generator. Generate ${questionCount || 5} multiple-choice questions based on the following material.
+
+MATERIAL/CONTEXT:
+${context}
+
+TOPIC: ${topic || "Based on the provided material"}
+DIFFICULTY: ${difficulty || "intermediate"}
+
+OUTPUT FORMAT - Return ONLY this JSON structure with NO additional text, NO markdown, NO explanation:
+
+{
+  "questions": [
+    {
+      "question": "Question text goes here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "answer": 0
+    }
+  ]
+}
+
+STRICT RULES:
+1. Generate questions DIRECTLY from the provided material above
+2. If vocabulary list: test word meanings, usage, synonyms
+3. If text passage: test comprehension, grammar, context
+4. "answer" must be index 0, 1, 2, or 3 (not the text)
+5. Exactly 4 options per question
+6. Return raw JSON only - no markdown code blocks
+7. Start response immediately with { character
+
+Generate ${questionCount || 5} questions now:`;
+    } else {
+      // Generate general questions on topic
+      prompt = `Generate ${questionCount || 5} English test questions about "${topic || "General English"}" at ${difficulty || "intermediate"} level.
 
 OUTPUT FORMAT - Return ONLY this JSON structure with NO additional text, NO markdown, NO explanation:
 
@@ -716,8 +753,13 @@ STRICT RULES:
 5. Start response immediately with { character
 
 Generate ${questionCount || 5} questions now:`;
+    }
 
-    console.log("🤖 Generating AI questions for:", topic);
+    console.log("🤖 Generating AI questions:", { 
+      topic, 
+      hasContext: !!context, 
+      contextLength: context?.length || 0 
+    });
 
     // Retry logic for overloaded API
     let response;

@@ -718,25 +718,63 @@ Rules:
 
     console.log("🤖 Generating AI questions for:", topic);
 
-    const response = await fetch(`${GEMINI_URL_TEST}?key=${GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 2048,
-        },
-      }),
-    });
+    // Retry logic for overloaded API
+    let response;
+    let data;
+    let lastError;
+    const maxRetries = 3;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📡 Attempt ${attempt}/${maxRetries} - Calling Gemini API...`);
+        
+        response = await fetch(`${GEMINI_URL_TEST}?key=${GEMINI_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 2048,
+            },
+          }),
+        });
 
-    const data = await response.json();
+        data = await response.json();
 
+        // Check if API is overloaded (503) or unavailable
+        if (!response.ok && data.error?.code === 503) {
+          lastError = new Error(`Model overloaded (attempt ${attempt}/${maxRetries})`);
+          console.warn(`⚠️ ${lastError.message}, retrying in ${attempt * 2}s...`);
+          
+          if (attempt < maxRetries) {
+            // Wait before retry (2s, 4s, 6s)
+            await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+            continue;
+          }
+        } else if (!response.ok) {
+          console.error("❌ Gemini API Error:", data);
+          throw new Error(data.error?.message || "Gemini API request failed");
+        }
+        
+        // Success - break retry loop
+        break;
+        
+      } catch (fetchError) {
+        lastError = fetchError;
+        console.error(`❌ Attempt ${attempt} failed:`, fetchError.message);
+        
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+        }
+      }
+    }
+    
+    // If all retries failed
     if (!response.ok) {
-      console.error("❌ Gemini API Error:", data);
-      throw new Error(data.error?.message || "Gemini API request failed");
+      throw lastError || new Error("Failed after all retry attempts");
     }
 
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";

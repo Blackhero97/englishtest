@@ -719,16 +719,19 @@ OUTPUT FORMAT - Return ONLY this JSON structure with NO additional text, NO mark
   ]
 }
 
-STRICT RULES:
+CRITICAL REQUIREMENTS:
 1. Generate questions DIRECTLY from the provided material above
 2. If vocabulary list: test word meanings, usage, synonyms
 3. If text passage: test comprehension, grammar, context
 4. "answer" must be index 0, 1, 2, or 3 (not the text)
 5. Exactly 4 options per question
-6. Return raw JSON only - no markdown code blocks
+6. Return COMPLETE and VALID JSON only
 7. Start response immediately with { character
+8. End response with } character
+9. IMPORTANT: Complete ALL ${questionCount || 5} questions - do not stop mid-question
+10. Double-check JSON is complete before sending
 
-Generate ${questionCount || 5} questions now:`;
+Generate ALL ${questionCount || 5} complete questions now:`;
     } else {
       // Generate general questions on topic
       prompt = `Generate ${questionCount || 5} English test questions about "${topic || "General English"}" at ${difficulty || "intermediate"} level.
@@ -745,14 +748,18 @@ OUTPUT FORMAT - Return ONLY this JSON structure with NO additional text, NO mark
   ]
 }
 
-STRICT RULES:
+CRITICAL REQUIREMENTS:
 1. "answer" must be index 0, 1, 2, or 3 (not the text)
 2. Exactly 4 options per question
 3. Test English grammar, vocabulary, or reading comprehension
-4. Return raw JSON only - no markdown code blocks
+4. Return COMPLETE and VALID JSON only
 5. Start response immediately with { character
+6. End response with } character
+7. IMPORTANT: Complete ALL ${questionCount || 5} questions - do not stop mid-question
+8. Ensure proper commas between questions
+9. Double-check JSON is complete before sending
 
-Generate ${questionCount || 5} questions now:`;
+Generate ALL ${questionCount || 5} complete questions now:`;
     }
 
     console.log("🤖 Generating AI questions:", { 
@@ -856,12 +863,51 @@ Generate ${questionCount || 5} questions now:`;
       throw new Error("AI did not return valid JSON format. Response: " + text.substring(0, 200));
     }
 
+    let jsonText = jsonMatch[0];
+    
+    // Fix common JSON issues
+    // 1. Fix incomplete arrays - add closing bracket if missing
+    const openBrackets = (jsonText.match(/\[/g) || []).length;
+    const closeBrackets = (jsonText.match(/\]/g) || []).length;
+    if (openBrackets > closeBrackets) {
+      console.warn("⚠️ Fixing incomplete array - adding missing ]");
+      // Add missing closing brackets
+      for (let i = 0; i < openBrackets - closeBrackets; i++) {
+        jsonText += ']';
+      }
+    }
+    
+    // 2. Fix incomplete objects - add closing brace if missing
+    const openBraces = (jsonText.match(/\{/g) || []).length;
+    const closeBraces = (jsonText.match(/\}/g) || []).length;
+    if (openBraces > closeBraces) {
+      console.warn("⚠️ Fixing incomplete object - adding missing }");
+      for (let i = 0; i < openBraces - closeBraces; i++) {
+        jsonText += '}';
+      }
+    }
+    
+    // 3. Remove trailing commas before closing brackets/braces
+    jsonText = jsonText.replace(/,(\s*[\]}])/g, '$1');
+    
+    // 4. Fix missing commas between array elements (common AI mistake)
+    jsonText = jsonText.replace(/\}(\s*)\{/g, '},$1{');
+    
+    // 5. Fix incomplete string quotes at the end
+    const lastQuoteIndex = jsonText.lastIndexOf('"');
+    const afterLastQuote = jsonText.substring(lastQuoteIndex + 1).trim();
+    if (afterLastQuote && !afterLastQuote.match(/^[\s,\]\}]*$/)) {
+      console.warn("⚠️ Fixing incomplete string at end");
+      jsonText = jsonText.substring(0, lastQuoteIndex + 1) + '"}]}';
+    }
+
     let aiData;
     try {
-      aiData = JSON.parse(jsonMatch[0]);
+      aiData = JSON.parse(jsonText);
     } catch (parseError) {
       console.error("❌ JSON parse error:", parseError.message);
-      console.error("Attempted to parse:", jsonMatch[0].substring(0, 200));
+      console.error("Attempted to parse:", jsonText.substring(0, 500));
+      console.error("Full problematic JSON:", jsonText);
       throw new Error("Invalid JSON format from AI: " + parseError.message);
     }
 

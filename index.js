@@ -787,7 +787,8 @@ Generate ALL ${questionCount || 5} complete questions now:`;
               temperature: 0.7,
               topK: 40,
               topP: 0.95,
-              maxOutputTokens: 2048,
+              maxOutputTokens: 4096, // Increased from 2048 to ensure complete responses
+              candidateCount: 1,
             },
           }),
         });
@@ -893,12 +894,31 @@ Generate ALL ${questionCount || 5} complete questions now:`;
     // 4. Fix missing commas between array elements (common AI mistake)
     jsonText = jsonText.replace(/\}(\s*)\{/g, '},$1{');
     
-    // 5. Fix incomplete string quotes at the end
-    const lastQuoteIndex = jsonText.lastIndexOf('"');
-    const afterLastQuote = jsonText.substring(lastQuoteIndex + 1).trim();
-    if (afterLastQuote && !afterLastQuote.match(/^[\s,\]\}]*$/)) {
-      console.warn("⚠️ Fixing incomplete string at end");
-      jsonText = jsonText.substring(0, lastQuoteIndex + 1) + '"}]}';
+    // 5. Fix malformed answer field patterns like "answer""}]} or "answer""
+    jsonText = jsonText.replace(/"answer"\s*"\s*"?\s*[\]\}]/g, (match) => {
+      console.warn("⚠️ Fixing malformed answer field:", match);
+      return '"answer": 0}';
+    });
+    
+    // 6. Fix incomplete last question - if we see "answer" without value followed by end
+    if (/"answer"\s*$/.test(jsonText) || /"answer"\s*"\s*$/.test(jsonText)) {
+      console.warn("⚠️ Fixing incomplete last answer field");
+      jsonText = jsonText.replace(/"answer"\s*"?\s*$/, '"answer": 0}]}');
+    }
+    
+    // 7. Fix pattern: "answer""}]} -> "answer": 0}]}
+    jsonText = jsonText.replace(/"answer"\s*"\s*"?\s*\}\s*\]\s*\}/g, '"answer": 0}]}');
+    
+    // 8. If JSON doesn't end properly, try to close it
+    if (!jsonText.endsWith('}')) {
+      const lastBrace = jsonText.lastIndexOf('}');
+      const afterLastBrace = jsonText.substring(lastBrace + 1);
+      
+      // Check if we need to add closing brackets
+      if (!afterLastBrace.includes(']')) {
+        console.warn("⚠️ Adding missing closing brackets");
+        jsonText = jsonText.substring(0, lastBrace + 1) + ']}';
+      }
     }
 
     let aiData;
@@ -906,9 +926,27 @@ Generate ALL ${questionCount || 5} complete questions now:`;
       aiData = JSON.parse(jsonText);
     } catch (parseError) {
       console.error("❌ JSON parse error:", parseError.message);
-      console.error("Attempted to parse:", jsonText.substring(0, 500));
-      console.error("Full problematic JSON:", jsonText);
-      throw new Error("Invalid JSON format from AI: " + parseError.message);
+      console.error("Attempted to parse (first 500 chars):", jsonText.substring(0, 500));
+      console.error("Last 200 chars:", jsonText.substring(jsonText.length - 200));
+      
+      // Last resort: try to extract valid questions even from broken JSON
+      try {
+        console.warn("⚠️ Attempting to salvage partial questions...");
+        const questionMatches = jsonText.matchAll(/\{\s*"question":\s*"[^"]*",\s*"options":\s*\[[^\]]*\],\s*"answer":\s*\d+\s*\}/g);
+        const salvaged = Array.from(questionMatches);
+        
+        if (salvaged.length > 0) {
+          console.log(`✅ Salvaged ${salvaged.length} valid questions from broken JSON`);
+          aiData = {
+            questions: salvaged.map(match => JSON.parse(match[0]))
+          };
+        } else {
+          throw parseError;
+        }
+      } catch (salvageError) {
+        console.error("❌ Could not salvage questions");
+        throw new Error("Invalid JSON format from AI: " + parseError.message);
+      }
     }
 
     if (!aiData.questions || !Array.isArray(aiData.questions)) {

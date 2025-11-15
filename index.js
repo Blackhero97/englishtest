@@ -254,12 +254,14 @@ app.get("/api/tests/:id", async (req, res) => {
 
 app.post("/api/tests", async (req, res) => {
   try {
-    const { id, name, description, duration, questions } = req.body;
+    const { id, name, description, duration, startDate, endDate, questions } = req.body;
     const newTest = new TestSet({
       id: id || `test-${Date.now()}`,
       name,
       description,
       duration,
+      startDate: startDate || null,
+      endDate: endDate || null,
       questions: questions || [],
     });
     await newTest.save();
@@ -271,10 +273,10 @@ app.post("/api/tests", async (req, res) => {
 
 app.put("/api/tests/:id", async (req, res) => {
   try {
-    const { name, description, duration, questions } = req.body;
+    const { name, description, duration, startDate, endDate, questions } = req.body;
     const test = await TestSet.findOneAndUpdate(
       { id: req.params.id },
-      { name, description, duration, questions },
+      { name, description, duration, startDate: startDate || null, endDate: endDate || null, questions },
       { new: true }
     );
     if (!test) return res.status(404).json({ error: "Test not found" });
